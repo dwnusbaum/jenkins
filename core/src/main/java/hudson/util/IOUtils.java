@@ -8,6 +8,7 @@ import java.nio.file.InvalidPathException;
 import org.apache.commons.io.LineIterator;
 
 import java.io.*;
+import java.nio.file.FileAlreadyExistsException;
 import java.util.Collection;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -50,8 +51,13 @@ public class IOUtils {
      *      This method returns the 'dir' parameter so that the method call flows better.
      */
     public static File mkdirs(File dir) throws IOException {
-        if(dir.mkdirs() || dir.exists())
-            return dir;
+        try {
+            Files.createDirectories(dir.toPath());
+        } catch (FileAlreadyExistsException e) {
+            throw e;
+        } catch (IOException e) {
+            // Ignore this error and try again.
+        }
 
         // following Ant <mkdir> task to avoid possible race condition.
         try {
@@ -60,10 +66,8 @@ public class IOUtils {
             // ignore
         }
 
-        if (dir.mkdirs() || dir.exists())
-            return dir;
-
-        throw new IOException("Failed to create a directory at "+dir);
+        Files.createDirectories(dir.toPath());
+        return dir;
     }
 
     /**

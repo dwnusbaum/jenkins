@@ -1155,19 +1155,13 @@ public final class FilePath implements Serializable {
      * Creates this directory.
      */
     public void mkdirs() throws IOException, InterruptedException {
-        if(!act(new SecureFileCallable<Boolean>() {
+        act(new SecureFileCallable<Void>() {
             private static final long serialVersionUID = 1L;
-            public Boolean invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
-                if(mkdirs(f) || f.exists())
-                    return true;    // OK
-
-                // following Ant <mkdir> task to avoid possible race condition.
-                Thread.sleep(10);
-
-                return f.mkdirs() || f.exists();
+            public Void invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
+                mkdirsE(f);
+                return null;
             }
-        }))
-            throw new IOException("Failed to mkdirs: "+remote);
+        });
     }
 
     /**
@@ -1953,7 +1947,7 @@ public final class FilePath implements Serializable {
         act(new SecureFileCallable<Void>() {
             private static final long serialVersionUID = 1L;
             public Void invoke(File f, VirtualChannel channel) throws IOException {
-            	reading(f).renameTo(creating(new File(target.remote)));
+                Files.move(reading(f).toPath(), creating(new File(target.remote)).toPath());
                 return null;
             }
         });
@@ -1974,8 +1968,7 @@ public final class FilePath implements Serializable {
                 // JENKINS-16846: if f.getName() is the same as one of the files/directories in f,
                 // then the rename op will fail
                 File tmp = new File(f.getAbsolutePath()+".__rename");
-                if (!f.renameTo(tmp))
-                    throw new IOException("Failed to rename "+f+" to "+tmp);
+                Files.move(f.toPath(), tmp.toPath());
 
                 File t = new File(target.getRemote());
                 
@@ -2933,19 +2926,26 @@ public final class FilePath implements Serializable {
         return f;
     }
 
-    private boolean mkdirs(File dir) {
-        if (dir.exists())   return false;
+    /**
+     * Pass through 'f' after ensuring that we can create those directories.
+     */
+    private File makingDirs(File f) {
+        filterNonNull().mkdirs(f);
+        return f;
+    }
 
-        filterNonNull().mkdirs(dir);
-        return dir.mkdirs();
+    private void mkdirs(File dir) throws IOException {
+        if (dir.exists()) {
+            return;
+        }
+        Files.createDirectories(makingDirs(dir).toPath());
     }
 
     private File mkdirsE(File dir) throws IOException {
         if (dir.exists()) {
             return dir;
         }
-        filterNonNull().mkdirs(dir);
-        return IOUtils.mkdirs(dir);
+        return IOUtils.mkdirs(makingDirs(dir));
     }
 
     private static final SoloFilePathFilter UNRESTRICTED = SoloFilePathFilter.wrap(FilePathFilter.UNRESTRICTED);
