@@ -72,6 +72,11 @@ import java.io.OutputStreamWriter;
 import java.io.RandomAccessFile;
 import java.io.Serializable;
 import java.io.Writer;
+import java.nio.file.DirectoryStream;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URI;
@@ -1947,7 +1952,11 @@ public final class FilePath implements Serializable {
         act(new SecureFileCallable<Void>() {
             private static final long serialVersionUID = 1L;
             public Void invoke(File f, VirtualChannel channel) throws IOException {
-                Files.move(reading(f).toPath(), creating(new File(target.remote)).toPath());
+                try {
+                    Files.move(reading(f).toPath(), creating(new File(target.remote)).toPath(), StandardCopyOption.COPY_ATTRIBUTES, LinkOption.NOFOLLOW_LINKS);
+                } catch (InvalidPathException e) {
+                    throw new IOException(e);
+                }
                 return null;
             }
         });
@@ -1965,19 +1974,29 @@ public final class FilePath implements Serializable {
         act(new SecureFileCallable<Void>() {
             private static final long serialVersionUID = 1L;
             public Void invoke(File f, VirtualChannel channel) throws IOException {
-                // JENKINS-16846: if f.getName() is the same as one of the files/directories in f,
-                // then the rename op will fail
-                File tmp = new File(f.getAbsolutePath()+".__rename");
-                Files.move(f.toPath(), tmp.toPath());
+                try {
+                    // JENKINS-16846: if f.getName() is the same as one of the files/directories in f,
+                    // then the rename op will fail
+                    File tmp = new File(f.getAbsolutePath()+".__rename");
+                    Path tmpPath = tmp.toPath();
+                    Files.move(f.toPath(), tmpPath, StandardCopyOption.COPY_ATTRIBUTES, LinkOption.NOFOLLOW_LINKS);
 
-                File t = new File(target.getRemote());
-                
-                for(File child : reading(tmp).listFiles()) {
-                    File target = new File(t, child.getName());
-                    if(!stating(child).renameTo(creating(target)))
-                        throw new IOException("Failed to rename "+child+" to "+target);
+                    Path t = Paths.get(target.getRemote());
+
+                    try (DirectoryStream<Path> children = Files.newDirectoryStream(tmpPath)) {
+                        for (Path child : children) {
+                            stating(child.toFile());
+                            Path target = t.resolve(tmpPath.relativize(child));
+                            creating(target.toFile());
+                            Files.move(child, target, StandardCopyOption.COPY_ATTRIBUTES, LinkOption.NOFOLLOW_LINKS);
+                        }
+                    }
+
+                    deleting(tmp);
+                    Files.delete(tmpPath);
+                } catch (InvalidPathException e) {
+                    throw new IOException(e);
                 }
-                deleting(tmp).delete();
                 return null;
             }
         });

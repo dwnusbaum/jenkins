@@ -9,6 +9,7 @@ import org.apache.commons.io.LineIterator;
 
 import java.io.*;
 import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -51,8 +52,15 @@ public class IOUtils {
      *      This method returns the 'dir' parameter so that the method call flows better.
      */
     public static File mkdirs(File dir) throws IOException {
+        Path path;
         try {
-            Files.createDirectories(dir.toPath());
+            path = dir.toPath();
+        } catch (InvalidPathException e) {
+            throw new IOException(e);
+        }
+
+        try {
+            Files.createDirectories(path);
         } catch (FileAlreadyExistsException e) {
             throw e;
         } catch (IOException e) {
@@ -66,7 +74,7 @@ public class IOUtils {
             // ignore
         }
 
-        Files.createDirectories(dir.toPath());
+        Files.createDirectories(path);
         return dir;
     }
 
