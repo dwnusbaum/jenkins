@@ -69,6 +69,24 @@ import javax.annotation.Nonnull;
  * @since 1.349
  */
 public abstract class ConsoleAnnotator<T> implements Serializable {
+
+    static {
+        // This class is used only to migrate serialized instances of hudson.console.ConsoleAnnotator$1Aggregator
+        // to the new inner class hudson.console.ConsoleAnnotator.Aggregator.
+        // WARNING: Attempt to (de-)serialize local class hudson.console.ConsoleAnnotator$1Aggregator.
+        @Deprecated
+        class Aggregator<T> extends ConsoleAnnotator<T> {
+            List<ConsoleAnnotator<T>> list;
+            @Override
+            public ConsoleAnnotator annotate(T context, MarkupText text) {
+                throw new AssertionError("Unreachable");
+            }
+            public Object readResolve() {
+                return new ConsoleAnnotator.Aggregator(list);
+            }
+        }
+    }
+
     /**
      * Annotates one line.
      *
@@ -100,32 +118,7 @@ public abstract class ConsoleAnnotator<T> implements Serializable {
         case 1:     return  cast(all.iterator().next()); // just one
         }
 
-        class Aggregator extends ConsoleAnnotator<T> {
-            List<ConsoleAnnotator<T>> list;
-
-            Aggregator(Collection list) {
-                this.list = new ArrayList<ConsoleAnnotator<T>>(list);
-            }
-
-            public ConsoleAnnotator annotate(T context, MarkupText text) {
-                ListIterator<ConsoleAnnotator<T>> itr = list.listIterator();
-                while (itr.hasNext()) {
-                    ConsoleAnnotator a =  itr.next();
-                    ConsoleAnnotator b = a.annotate(context,text);
-                    if (a!=b) {
-                        if (b==null)    itr.remove();
-                        else            itr.set(b);
-                    }
-                }
-
-                switch (list.size()) {
-                case 0:     return null;    // no more annotator left
-                case 1:     return list.get(0); // no point in aggregating
-                default:    return this;
-                }
-            }
-        }
-        return new Aggregator(all);
+        return new Aggregator<>(all);
     }
 
     /**
@@ -149,6 +142,33 @@ public abstract class ConsoleAnnotator<T> implements Serializable {
             }
         }
         return r;
+    }
+
+    private static class Aggregator<T> extends ConsoleAnnotator<T> {
+        List<ConsoleAnnotator<T>> list;
+
+        Aggregator(Collection list) {
+            this.list = new ArrayList<>(list);
+        }
+
+        @Override
+        public ConsoleAnnotator annotate(T context, MarkupText text) {
+            ListIterator<ConsoleAnnotator<T>> itr = list.listIterator();
+            while (itr.hasNext()) {
+                ConsoleAnnotator a =  itr.next();
+                ConsoleAnnotator b = a.annotate(context,text);
+                if (a!=b) {
+                    if (b==null)    itr.remove();
+                    else            itr.set(b);
+                }
+            }
+
+            switch (list.size()) {
+            case 0:     return null;    // no more annotator left
+            case 1:     return list.get(0); // no point in aggregating
+            default:    return this;
+            }
+        }
     }
 
     private static final long serialVersionUID = 1L;
