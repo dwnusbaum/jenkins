@@ -69,12 +69,12 @@ public class CompositeIOException extends IOException {
         this.exceptions.forEach(this::addSuppressed);
     }
 
-    public List<IOException> getExceptions() {
-        return exceptions;
-    }
-
     public CompositeIOException(String message, IOException... exceptions) {
         this(message, Arrays.asList(exceptions));
+    }
+
+    public List<IOException> getExceptions() {
+        return exceptions;
     }
 
     public UncheckedIOException asUncheckedIOException() {
