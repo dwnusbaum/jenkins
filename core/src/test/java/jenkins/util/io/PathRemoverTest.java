@@ -428,7 +428,8 @@ public class PathRemoverTest {
     @Issue("JENKINS-55448")
     public void testForceRemoveRecursive_TruncatesNumberOfExceptions() throws IOException {
         assumeTrue(Functions.isWindows());
-        final int lockedFiles = CompositeIOException.MAX_SUPPRESSED_EXCEPTIONS + 5;
+        final int maxExceptions = CompositeIOException.EXCEPTION_LIMIT;
+        final int lockedFiles = maxExceptions + 5;
         final int totalFiles = lockedFiles + 5;
         File dir = tmp.newFolder();
         File[] files = new File[totalFiles];
@@ -443,7 +444,9 @@ public class PathRemoverTest {
             PathRemover.newSimpleRemover().forceRemoveRecursive(dir.toPath());
             fail("Deletion should have failed");
         } catch (CompositeIOException e) {
-            assertThat(e.getSuppressed(), arrayWithSize(CompositeIOException.MAX_SUPPRESSED_EXCEPTIONS));
+            assertThat(e.getSuppressed(), arrayWithSize(maxExceptions + 1));
+            assertThat(e.getSuppressed()[maxExceptions].getMessage(),
+                    containsString((lockedFiles + 1 - maxExceptions) + " additional exceptions"));
         }
         assertTrue(dir.exists());
         assertThat(dir.listFiles().length, equalTo(lockedFiles));
